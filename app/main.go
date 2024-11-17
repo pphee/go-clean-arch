@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/bxcodec/go-clean-arch/internal/repository/qdrant"
 	"log"
 	"net/url"
 	"os"
@@ -20,7 +21,7 @@ import (
 	"github.com/bxcodec/go-clean-arch/internal/rest"
 	"github.com/bxcodec/go-clean-arch/internal/rest/middleware"
 	"github.com/joho/godotenv"
-	"github.com/qdrant/go-client/qdrant"
+	client "github.com/qdrant/go-client/qdrant"
 )
 
 const (
@@ -45,13 +46,12 @@ func main() {
 	qdrantHost := os.Getenv("QDRANT_HOST")
 	qdrantApiKey := os.Getenv("QDRANT_API_KEY")
 
-	qdrantClient, err := client.NewClient(client.Config{
+	cfg := &client.Config{
 		Host:   qdrantHost,
-		ApiKey: qdrantApiKey,
-	})
-	if err != nil {
-		log.Fatal("Failed to connect to Qdrant: ", err)
+		APIKey: qdrantApiKey,
 	}
+
+	collectionName := os.Getenv("QDRANT_COLLECTION_NAME")
 
 	connection := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", dbUser, dbPass, dbHost, dbPort, dbName)
 	val := url.Values{}
@@ -94,19 +94,14 @@ func main() {
 	svc := article.NewService(articleRepo, authorRepo)
 	rest.NewArticleHandler(e, svc)
 
-	bmiRepo := mysqlRepo.NewBMIRepository(dbConn)
-	bmiService := bmi.NewServices(bmiRepo)
-	rest.NewBmiHandler(e, bmiService)
+	bmiQdrantRepo, err := qdrantrepo.NewBMIRepository(qdrantHost, qdrantApiKey, collectionName)
+	if err != nil {
+		log.Fatal("Failed to create Qdrant repository:", err)
+	}
 
-	// Example route to test Qdrant
-	e.GET("/collection/:name", func(c echo.Context) error {
-		collectionName := c.Param("name")
-		info, err := qdrantClient.GetCollection(ctx, &client.GetCollectionParams{Name: collectionName})
-		if err != nil {
-			return c.JSON(500, map[string]string{"error": err.Error()})
-		}
-		return c.JSON(200, info)
-	})
+	bmiRepo := mysqlRepo.NewBMIRepository(dbConn)
+	bmiService := bmi.NewServices(bmiRepo, bmiQdrantRepo)
+	rest.NewBmiHandler(e, bmiService)
 
 	address := os.Getenv("SERVER_ADDRESS")
 	if address == "" {

@@ -16,3 +16,9 @@ type BMICalculationRequest struct {
 	Height float64 `json:"height" validate:"required,gt=0"`
 	Weight float64 `json:"weight" validate:"required,gt=0"`
 }
+
+type PointStruct struct {
+	ID      string                 `json:"id"`
+	Vector  []float32              `json:"vector"`
+	Payload map[string]interface{} `json:"payload"`
+}

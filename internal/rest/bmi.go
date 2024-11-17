@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/bxcodec/go-clean-arch/domain"
 	"github.com/labstack/echo/v4"
+	echoSwagger "github.com/swaggo/echo-swagger"
 	"net/http"
 	"strconv"
 )
@@ -15,6 +16,8 @@ type BmiService interface {
 	GetAllBMI(ctx context.Context) ([]*domain.BMI, error)
 	UpdateBMI(ctx context.Context, bmi *domain.BMI) error
 	DeleteBMI(ctx context.Context, id int64) error
+	QueryBMI(ctx context.Context, queryVector []float32) ([]*domain.BMI, error)
+	StoreBMI(ctx context.Context, height, weight float64) (*domain.BMI, error)
 }
 
 type BmiHandler struct {
@@ -25,12 +28,14 @@ func NewBmiHandler(e *echo.Echo, b BmiService) {
 	handler := BmiHandler{
 		BmiSrv: b,
 	}
+	e.GET("/swagger/*", echoSwagger.WrapHandler)
 
 	e.POST("/bmi", handler.CalculateAndStoreBMI)
 	e.GET("/bmi/:id", handler.GetBMIByID)
 	e.GET("/bmi", handler.GetAllBMI)
 	e.PUT("/bmi/:id", handler.UpdateBMI)
 	e.DELETE("/bmi/:id", handler.DeleteBMI)
+	e.POST("/bmi/query", handler.QueryBMI)
 }
 
 func (h *BmiHandler) CalculateAndStoreBMI(c echo.Context) error {
@@ -119,4 +124,36 @@ func (h *BmiHandler) DeleteBMI(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "BMI record deleted successfully"})
+}
+
+func (h *BmiHandler) StoreBMI(c echo.Context) error {
+	var req domain.BMICalculationRequest
+	if err := c.Bind(&req); err != nil {
+	}
+
+	ctx := c.Request().Context()
+	bmi, err := h.BmiSrv.StoreBMI(ctx, req.Height, req.Weight)
+	if err != nil {
+		return nil
+	}
+
+	return c.JSON(http.StatusOK, bmi)
+}
+
+func (h *BmiHandler) QueryBMI(c echo.Context) error {
+	var req struct {
+		QueryVector []float32 `json:"query_vector"`
+	}
+
+	if err := c.Bind(&req); err != nil {
+		return nil
+	}
+
+	ctx := c.Request().Context()
+	results, err := h.BmiSrv.QueryBMI(ctx, req.QueryVector)
+	if err != nil {
+		return nil
+	}
+
+	return c.JSON(http.StatusOK, results)
 }

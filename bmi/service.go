@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/bxcodec/go-clean-arch/domain"
+	client "github.com/qdrant/go-client/qdrant"
 	"time"
 )
 
@@ -15,13 +16,21 @@ type bmiRepository interface {
 	Delete(ctx context.Context, id int64) error
 }
 
-type Service struct {
-	bmiRepo bmiRepository
+type bmiQdrantRepository interface {
+	CreateCollection(ctx context.Context) error
+	Store(ctx context.Context, bmi *domain.BMI) error
+	Query(ctx context.Context, queryVector []float32) ([]*client.ScoredPoint, error)
 }
 
-func NewServices(b bmiRepository) *Service {
+type Service struct {
+	bmiRepo       bmiRepository
+	bmiQdrantRepo bmiQdrantRepository
+}
+
+func NewServices(b bmiRepository, bq bmiQdrantRepository) *Service {
 	return &Service{
-		bmiRepo: b,
+		bmiRepo:       b,
+		bmiQdrantRepo: bq,
 	}
 }
 
@@ -113,4 +122,38 @@ func (u *Service) UpdateBMI(ctx context.Context, bmi *domain.BMI) error {
 
 func (u *Service) DeleteBMI(ctx context.Context, id int64) error {
 	return u.bmiRepo.Delete(ctx, id)
+}
+
+func (u *Service) StoreBMI(ctx context.Context, height, weight float64) (*domain.BMI, error) {
+	if height <= 0 {
+		return nil, fmt.Errorf("height must be greater than 0")
+	}
+
+	value := weight / (height * height)
+	bmi := &domain.BMI{
+		Height:    height,
+		Weight:    weight,
+		Value:     value,
+		CreatedAt: time.Now(),
+	}
+
+	bmi.Category, bmi.Risk = CalculateBMICategoryAndRisk(value)
+
+	if err := u.bmiRepo.Store(ctx, bmi); err != nil {
+		return nil, fmt.Errorf("failed to store BMI in MySQL: %w", err)
+	}
+
+	if err := u.bmiQdrantRepo.Store(ctx, bmi); err != nil {
+		return nil, fmt.Errorf("failed to store BMI in Qdrant: %w", err)
+	}
+
+	return bmi, nil
+}
+
+func (u *Service) QueryBMI(ctx context.Context, queryVector []float32) ([]*client.ScoredPoint, error) {
+	results, err := u.bmiQdrantRepo.Query(ctx, queryVector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query BMI from Qdrant: %w", err)
+	}
+	return results, nil
 }
