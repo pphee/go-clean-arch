@@ -14,19 +14,3 @@ message BMICalculateRequest {
 message BMICalculateResponse {
   double bmi = 1;
 }
-
-message UpsertPoints {
-  string collection_name = 1;
-  repeated PointStruct points = 2;
-}
-
-message PointsOperationResponse {
-  bool success = 1;
-  string message = 2;
-}
-
-message PointStruct {
-  string id = 1;
-  map<string, string> payload = 2;
-  repeated float vector = 3;
-}
