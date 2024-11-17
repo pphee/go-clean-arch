@@ -60,6 +60,25 @@ func CalculateBMICategoryAndRisk(value float64) (string, string) {
 	}
 }
 
+func CalculateBMI(height, weight float64) (string, string) {
+	bmi := weight / (height * height)
+
+	switch {
+	case bmi < 18.5:
+		return "น้ำหนักน้อย / ผอม", "มากกว่าคนปกติ"
+	case bmi >= 18.5 && bmi <= 22.9:
+		return "ปกติ (สุขภาพดี)", "เท่าคนปกติ"
+	case bmi >= 23 && bmi <= 24.9:
+		return "ท้วม / โรคอ้วนระดับ 1", "อันตรายระดับ 1"
+	case bmi >= 25 && bmi <= 29.9:
+		return "อ้วน / โรคอ้วนระดับ 2", "อันตรายระดับ 2"
+	case bmi >= 30:
+		return "อ้วนมาก / โรคอ้วนระดับ 3", "อันตรายระดับ 3"
+	default:
+		return "", ""
+	}
+}
+
 func (u *Service) GetBMIByID(ctx context.Context, id int64) (*domain.BMI, error) {
 	bmi, err := u.bmiRepo.GetByID(ctx, id)
 	if err != nil {

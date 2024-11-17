@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
-	"github.com/bxcodec/go-clean-arch/bmi"
 	"log"
 	"net/url"
 	"os"
@@ -16,9 +16,11 @@ import (
 	mysqlRepo "github.com/bxcodec/go-clean-arch/internal/repository/mysql"
 
 	"github.com/bxcodec/go-clean-arch/article"
+	"github.com/bxcodec/go-clean-arch/bmi"
 	"github.com/bxcodec/go-clean-arch/internal/rest"
 	"github.com/bxcodec/go-clean-arch/internal/rest/middleware"
 	"github.com/joho/godotenv"
+	"github.com/qdrant/go-client/qdrant"
 )
 
 const (
@@ -34,12 +36,23 @@ func init() {
 }
 
 func main() {
-	//prepare database
+	// Load environment variables
 	dbHost := os.Getenv("DATABASE_HOST")
 	dbPort := os.Getenv("DATABASE_PORT")
 	dbUser := os.Getenv("DATABASE_USER")
 	dbPass := os.Getenv("DATABASE_PASS")
 	dbName := os.Getenv("DATABASE_NAME")
+	qdrantHost := os.Getenv("QDRANT_HOST")
+	qdrantApiKey := os.Getenv("QDRANT_API_KEY")
+
+	qdrantClient, err := client.NewClient(client.Config{
+		Host:   qdrantHost,
+		ApiKey: qdrantApiKey,
+	})
+	if err != nil {
+		log.Fatal("Failed to connect to Qdrant: ", err)
+	}
+
 	connection := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", dbUser, dbPass, dbHost, dbPort, dbName)
 	val := url.Values{}
 	val.Add("parseTime", "1")
@@ -60,8 +73,8 @@ func main() {
 			log.Fatal("got error when closing the DB connection", err)
 		}
 	}()
-	// prepare echo
 
+	// Prepare Echo server
 	e := echo.New()
 	e.Use(middleware.CORS)
 	timeoutStr := os.Getenv("CONTEXT_TIMEOUT")
@@ -77,7 +90,7 @@ func main() {
 	authorRepo := mysqlRepo.NewAuthorRepository(dbConn)
 	articleRepo := mysqlRepo.NewArticleRepository(dbConn)
 
-	// Build service Layer
+	// Build service layer
 	svc := article.NewService(articleRepo, authorRepo)
 	rest.NewArticleHandler(e, svc)
 
@@ -85,10 +98,19 @@ func main() {
 	bmiService := bmi.NewServices(bmiRepo)
 	rest.NewBmiHandler(e, bmiService)
 
-	// Start Server
+	// Example route to test Qdrant
+	e.GET("/collection/:name", func(c echo.Context) error {
+		collectionName := c.Param("name")
+		info, err := qdrantClient.GetCollection(ctx, &client.GetCollectionParams{Name: collectionName})
+		if err != nil {
+			return c.JSON(500, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(200, info)
+	})
+
 	address := os.Getenv("SERVER_ADDRESS")
 	if address == "" {
 		address = defaultAddress
 	}
-	log.Fatal(e.Start(address)) //nolint
+	log.Fatal(e.Start(address))
 }
