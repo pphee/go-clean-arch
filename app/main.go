@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"github.com/bxcodec/go-clean-arch/bmi"
 	"log"
 	"net/url"
 	"os"
@@ -79,6 +80,10 @@ func main() {
 	// Build service Layer
 	svc := article.NewService(articleRepo, authorRepo)
 	rest.NewArticleHandler(e, svc)
+
+	bmiRepo := mysqlRepo.NewBMIRepository(dbConn)
+	bmiService := bmi.NewServices(bmiRepo)
+	rest.NewBmiHandler(e, bmiService)
 
 	// Start Server
 	address := os.Getenv("SERVER_ADDRESS")
